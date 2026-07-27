@@ -22,18 +22,9 @@ tr[data-hve-hovered] {
   cursor: move !important;
 }
 
-/* 非表格元素选中时才添加 position:relative（表格单元格自带 relative，重复设置会导致布局错位） */
-[data-hve-selected]:not(td):not(th):not(tr):not(thead):not(tbody):not(tfoot):not(table) {
-  position: relative;
-}
-
-/* 选中态提示（单击选中=可拖动，双击=可编辑） */
-/* 非表格单元格：使用 ::before 伪元素显示标签 */
-[data-hve-selected]:not(td):not(th):not(tr)::before {
-  content: attr(data-hve-select-label);
-  position: absolute;
-  top: -20px;
-  left: 0;
+/* 选中标签使用独立浮层，避免修改原元素的定位上下文和页面布局 */
+[data-hve-selection-label] {
+  position: fixed;
   font: 10px/1 'SF Pro Text', -apple-system, sans-serif;
   color: white;
   background: #D97706;
@@ -45,8 +36,7 @@ tr[data-hve-hovered] {
   opacity: 0.85;
 }
 
-/* 表格元素选中：不使用 ::before 伪元素（避免撑大单元格导致表格错位） */
-/* 标签通过 JS 浮层方式显示（见 selector.js） */
+/* 表格元素轮廓向内绘制，避免视觉上覆盖相邻单元格 */
 td[data-hve-selected],
 th[data-hve-selected],
 tr[data-hve-selected] {
@@ -56,7 +46,6 @@ tr[data-hve-selected] {
 /* 表格整体选中时 */
 table[data-hve-selected] {
   outline-offset: 2px !important;
-  position: relative;
 }
 
 /* 编辑态明确用蓝色区分 */
@@ -682,11 +671,6 @@ th[data-hve-editing] {
 [data-hve-group][data-hve-selected] {
   outline-style: dashed !important;
   outline-color: #9333EA !important;
-}
-
-[data-hve-group][data-hve-selected]::before {
-  content: '组合' !important;
-  background: #9333EA !important;
 }
 
 [data-hve-locked]::after {

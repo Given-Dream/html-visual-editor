@@ -4,6 +4,11 @@ window.HVE_Selector = (function () {
   let selectedElements = [];        // 多选元素列表
   let hoveredElement = null;
   let isActive = false;
+  let selectionLabelOverlay = null;
+  let selectionLabelTarget = null;
+  let selectionLabelObserver = null;
+  let selectionLabelResizeObserver = null;
+  let selectionLabelRafId = null;
 
   // 框选相关
   let isMarqueeSelecting = false;
@@ -29,6 +34,8 @@ window.HVE_Selector = (function () {
     document.addEventListener('mousemove', onMouseMove, true);
     document.addEventListener('click', onClick, true);
     document.addEventListener('mousedown', onMouseDown, true);
+    window.addEventListener('scroll', scheduleSelectionLabelPosition, true);
+    window.addEventListener('resize', scheduleSelectionLabelPosition, true);
   }
 
   function deactivate() {
@@ -38,6 +45,8 @@ window.HVE_Selector = (function () {
     document.removeEventListener('mousedown', onMouseDown, true);
     document.removeEventListener('mousemove', onMarqueeMove, true);
     document.removeEventListener('mouseup', onMarqueeUp, true);
+    window.removeEventListener('scroll', scheduleSelectionLabelPosition, true);
+    window.removeEventListener('resize', scheduleSelectionLabelPosition, true);
     clearTimeout(marqueeHoldTimer);
     marqueeHoldTimer = null;
     marqueeArmed = false;
@@ -550,9 +559,6 @@ window.HVE_Selector = (function () {
     notifySelectionChanged();
   }
 
-  // 表格元素浮层标签
-  let tableLabelOverlay = null;
-
   function addToSelection(el) {
     if (selectedElements.includes(el)) return;
     selectedElements.push(el);
@@ -561,11 +567,6 @@ window.HVE_Selector = (function () {
     // 设置选中标签（显示元素类型，类似 PPT 的选中提示）
     const tagLabel = getElementLabel(el);
     el.setAttribute('data-hve-select-label', tagLabel);
-
-    // 表格内元素（td/th/tr）使用浮层标签避免布局错位
-    if (isTableElement(el)) {
-      showTableLabel(el, tagLabel);
-    }
 
     if (selectedElements.length > 1) {
       el.setAttribute('data-hve-multi-selected', 'true');
@@ -578,56 +579,89 @@ window.HVE_Selector = (function () {
   }
 
   /**
-   * 判断是否是表格内部元素（td/th/tr/thead/tbody/tfoot）
+   * 使用独立浮层显示元素类型。浮层挂在 body 下，不会改变被选元素的
+   * position，也不会成为其绝对定位子元素的新包含块。
    */
-  function isTableElement(el) {
-    const tag = el.tagName;
-    return tag === 'TD' || tag === 'TH' || tag === 'TR' || tag === 'THEAD' || tag === 'TBODY' || tag === 'TFOOT';
-  }
+  function showSelectionLabel(el, label) {
+    removeSelectionLabel();
+    if (!el || !el.isConnected) return;
 
-  /**
-   * 为表格元素显示浮层标签（不使用 ::before 伪元素）
-   */
-  function showTableLabel(el, label) {
-    removeTableLabel();
-    tableLabelOverlay = document.createElement('div');
-    tableLabelOverlay.setAttribute('data-hve-editor', 'true');
-    tableLabelOverlay.setAttribute('data-hve-table-label', 'true');
-    tableLabelOverlay.textContent = label;
-    tableLabelOverlay.style.cssText = `
-      position: fixed;
-      font: 10px/1 'SF Pro Text', -apple-system, sans-serif;
-      color: white;
-      background: #D97706;
-      padding: 2px 6px;
-      border-radius: 4px 4px 0 0;
-      pointer-events: none;
-      z-index: 2147483641;
-      white-space: nowrap;
-      opacity: 0.85;
-    `;
-    document.body.appendChild(tableLabelOverlay);
-    positionTableLabel(el);
-  }
+    selectionLabelTarget = el;
+    selectionLabelOverlay = document.createElement('div');
+    selectionLabelOverlay.setAttribute('data-hve-editor', 'true');
+    selectionLabelOverlay.setAttribute('data-hve-selection-label', 'true');
+    selectionLabelOverlay.textContent = label;
+    selectionLabelOverlay.style.visibility = 'hidden';
+    document.body.appendChild(selectionLabelOverlay);
 
-  /**
-   * 定位表格浮层标签到元素上方
-   */
-  function positionTableLabel(el) {
-    if (!tableLabelOverlay || !el) return;
-    const rect = el.getBoundingClientRect();
-    tableLabelOverlay.style.left = rect.left + 'px';
-    tableLabelOverlay.style.top = (rect.top - 16) + 'px';
-  }
-
-  /**
-   * 移除表格浮层标签
-   */
-  function removeTableLabel() {
-    if (tableLabelOverlay && tableLabelOverlay.parentNode) {
-      tableLabelOverlay.remove();
+    if (typeof MutationObserver !== 'undefined') {
+      selectionLabelObserver = new MutationObserver(scheduleSelectionLabelPosition);
+      selectionLabelObserver.observe(el, {
+        attributes: true,
+        attributeFilter: ['style', 'class']
+      });
     }
-    tableLabelOverlay = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      selectionLabelResizeObserver = new ResizeObserver(scheduleSelectionLabelPosition);
+      selectionLabelResizeObserver.observe(el);
+    }
+
+    scheduleSelectionLabelPosition();
+  }
+
+  function scheduleSelectionLabelPosition() {
+    if (!selectionLabelOverlay || selectionLabelRafId) return;
+    selectionLabelRafId = requestAnimationFrame(() => {
+      selectionLabelRafId = null;
+      positionSelectionLabel();
+    });
+  }
+
+  function positionSelectionLabel() {
+    if (!selectionLabelOverlay || !selectionLabelTarget) return;
+    if (!selectionLabelTarget.isConnected) {
+      removeSelectionLabel();
+      return;
+    }
+
+    const rect = selectionLabelTarget.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0 || rect.bottom < 0 ||
+        rect.right < 0 || rect.top > window.innerHeight || rect.left > window.innerWidth) {
+      selectionLabelOverlay.style.visibility = 'hidden';
+      return;
+    }
+
+    const labelRect = selectionLabelOverlay.getBoundingClientRect();
+    const gap = 4;
+    const maxLeft = Math.max(gap, window.innerWidth - labelRect.width - gap);
+    const left = Math.min(Math.max(gap, rect.left), maxLeft);
+    const above = rect.top - labelRect.height - gap;
+    const below = Math.min(window.innerHeight - labelRect.height - gap, rect.bottom + gap);
+    const top = above >= gap ? above : Math.max(gap, below);
+
+    selectionLabelOverlay.style.left = `${Math.round(left)}px`;
+    selectionLabelOverlay.style.top = `${Math.round(top)}px`;
+    selectionLabelOverlay.style.visibility = 'visible';
+  }
+
+  function removeSelectionLabel() {
+    if (selectionLabelRafId) {
+      cancelAnimationFrame(selectionLabelRafId);
+      selectionLabelRafId = null;
+    }
+    if (selectionLabelObserver) {
+      selectionLabelObserver.disconnect();
+      selectionLabelObserver = null;
+    }
+    if (selectionLabelResizeObserver) {
+      selectionLabelResizeObserver.disconnect();
+      selectionLabelResizeObserver = null;
+    }
+    if (selectionLabelOverlay) {
+      selectionLabelOverlay.remove();
+    }
+    selectionLabelOverlay = null;
+    selectionLabelTarget = null;
   }
 
   /**
@@ -662,11 +696,6 @@ window.HVE_Selector = (function () {
     el.removeAttribute('data-hve-multi-selected');
     el.removeAttribute('data-hve-select-label');
 
-    // 清理表格浮层标签
-    if (isTableElement(el)) {
-      removeTableLabel();
-    }
-
     // 如果只剩一个，移除它的多选标记
     if (selectedElements.length === 1) {
       selectedElements[0].removeAttribute('data-hve-multi-selected');
@@ -700,8 +729,7 @@ window.HVE_Selector = (function () {
     selectedElements = [];
     selectedElement = null;
 
-    // 清理表格浮层标签
-    removeTableLabel();
+    removeSelectionLabel();
 
     hideMultiSelectInfo();
 
@@ -726,10 +754,7 @@ window.HVE_Selector = (function () {
       hideMultiSelectInfo();
       selectedElement = selectedElements[0];
 
-      // 如果选中的不是表格元素，清理表格浮层标签
-      if (!isTableElement(selectedElement)) {
-        removeTableLabel();
-      }
+      showSelectionLabel(selectedElement, getElementLabel(selectedElement));
 
       if (window.HVE_Resize) {
         window.HVE_Resize.attachTo(selectedElement);
@@ -773,6 +798,7 @@ window.HVE_Selector = (function () {
       } catch (e) { /* ignore */ }
     } else if (selectedElements.length > 1) {
       // 多选模式 — 隐藏单元素工具栏和 resize，显示多选信息
+      removeSelectionLabel();
       if (window.HVE_Resize) {
         window.HVE_Resize.detach();
       }
