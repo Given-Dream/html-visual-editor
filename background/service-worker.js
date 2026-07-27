@@ -78,6 +78,7 @@ async function injectContentScripts(tabId) {
         'content/image-handler.js',
         'content/align-guide.js',
         'content/toolbar.js',
+        'content/ppt-ribbon.js',
         'content/insert-panel.js',
         'content/context-menu.js',
         'content/page-sorter.js',

@@ -34,6 +34,15 @@
         <span>开启编辑模式</span>
       </button>
 
+      <!-- 交互模式切换 -->
+      <div class="control-group interaction-mode-group">
+        <div class="group-label">操作模式</div>
+        <div class="mode-switch" id="interaction-mode" role="group" aria-label="操作模式">
+          <button class="mode-option active" type="button" data-mode="move" aria-pressed="true">移动元素</button>
+          <button class="mode-option" type="button" data-mode="text" aria-pressed="false">编辑文字</button>
+        </div>
+        <div class="mode-hint" id="mode-hint">单击选中元素后拖动调整位置</div>
+      </div>
       <!-- 文件操作 -->
       <div class="control-group">
         <div class="group-label">文件</div>

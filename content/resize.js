@@ -104,16 +104,16 @@ window.HVE_Resize = (function () {
     origWidth = parseFloat(computed.width);
     origHeight = parseFloat(computed.height);
 
-    // 读取当前 transform 中的 translate 值（与 drag-move.js 保持一致）
-    const transform = currentTarget.style.transform || '';
-    const translateMatch = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
-    origLeft = translateMatch ? parseFloat(translateMatch[1]) || 0 : 0;
-    origTop = translateMatch ? parseFloat(translateMatch[2]) || 0 : 0;
+    // 使用独立 translate 属性，避免覆盖页面原有 transform
+    const translateParts = (currentTarget.style.translate || '').trim().split(/\s+/);
+    origLeft = parseFloat(translateParts[0]) || 0;
+    origTop = parseFloat(translateParts[1]) || 0;
 
     beforeState = {
       width: currentTarget.style.width || '',
       height: currentTarget.style.height || '',
-      transform: currentTarget.style.transform || ''
+      transform: currentTarget.style.transform || '',
+      translate: currentTarget.style.translate || ''
     };
 
     document.addEventListener('mousemove', onMouseMove, true);
@@ -157,13 +157,10 @@ window.HVE_Resize = (function () {
     currentTarget.style.height = newHeight + 'px';
 
     if (dir.includes('w') || dir.includes('n')) {
-      // 使用 transform: translate() 来补偿位置偏移，与 drag-move.js 一致
+      // 独立位移不会破坏元素已有的 transform
       const tx = dir.includes('w') ? newLeft : origLeft;
       const ty = dir.includes('n') ? newTop : origTop;
-      const current = currentTarget.style.transform || '';
-      const cleaned = current.replace(/translate\([^)]+\)\s*/g, '').trim();
-      const translateStr = `translate(${tx}px, ${ty}px)`;
-      currentTarget.style.transform = cleaned ? `${translateStr} ${cleaned}` : translateStr;
+      currentTarget.style.translate = `${tx}px ${ty}px`;
     }
 
     updateHandlePositions();
@@ -181,7 +178,8 @@ window.HVE_Resize = (function () {
         after: {
           width: currentTarget.style.width,
           height: currentTarget.style.height,
-          transform: currentTarget.style.transform || ''
+          transform: currentTarget.style.transform || '',
+          translate: currentTarget.style.translate || ''
         },
         description: '调整元素大小'
       });

@@ -11,6 +11,10 @@ window.HVE_Selector = (function () {
   let marqueeBox = null;             // 框选矩形 DOM 元素
   let marqueeStartX = 0, marqueeStartY = 0;
   let marqueeStartTime = 0;
+  let marqueeHoldTimer = null;
+  let marqueeArmed = false;
+  const MARQUEE_HOLD_MS = 350;
+  const MARQUEE_MOVE_THRESHOLD = 5;
   let cachedCandidates = null;       // 框选期间缓存候选元素
   let marqueeRafId = null;           // requestAnimationFrame 节流
 
@@ -34,6 +38,9 @@ window.HVE_Selector = (function () {
     document.removeEventListener('mousedown', onMouseDown, true);
     document.removeEventListener('mousemove', onMarqueeMove, true);
     document.removeEventListener('mouseup', onMarqueeUp, true);
+    clearTimeout(marqueeHoldTimer);
+    marqueeHoldTimer = null;
+    marqueeArmed = false;
     clearHover();
     deselectAll();
     removeMarquee();
@@ -83,7 +90,13 @@ window.HVE_Selector = (function () {
       marqueeStartX = e.clientX;
       marqueeStartY = e.clientY;
       marqueeStartTime = Date.now();
-      // 先监听 mousemove，等移动超过阈值后再真正开始框选
+      marqueeArmed = false;
+      clearTimeout(marqueeHoldTimer);
+      marqueeHoldTimer = setTimeout(() => {
+        marqueeArmed = true;
+        marqueeHoldTimer = null;
+      }, MARQUEE_HOLD_MS);
+      // 长按达到阈值后，再通过拖动启动框选
       document.addEventListener('mousemove', onMarqueeMove, true);
       document.addEventListener('mouseup', onMarqueeUp, true);
     }
@@ -93,15 +106,30 @@ window.HVE_Selector = (function () {
   const CONTAINER_TAGS = new Set(['DIV', 'SECTION', 'MAIN', 'ARTICLE', 'ASIDE', 'HEADER', 'FOOTER', 'NAV']);
 
   function isContainerLike(el) {
-    return CONTAINER_TAGS.has(el.tagName);
+    if (!el || !CONTAINER_TAGS.has(el.tagName)) return false;
+
+    // 含直接文字的 DIV 是可编辑文字对象，不应当作空白容器
+    const hasDirectText = Array.from(el.childNodes).some(node =>
+      node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0
+    );
+    if (hasDirectText || el.classList.contains('text-node')) return false;
+
+    return true;
   }
 
   function onMarqueeMove(e) {
     const dx = e.clientX - marqueeStartX;
     const dy = e.clientY - marqueeStartY;
 
-    // 移动超过 5px 才真正开始框选
-    if (!isMarqueeSelecting && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+    const movedEnough = Math.abs(dx) > MARQUEE_MOVE_THRESHOLD || Math.abs(dy) > MARQUEE_MOVE_THRESHOLD;
+
+    // 未达到长按时间便移动，视为普通操作并取消框选候选
+    if (!marqueeArmed) {
+      if (movedEnough) cancelPendingMarquee();
+      return;
+    }
+
+    if (!isMarqueeSelecting && movedEnough) {
       isMarqueeSelecting = true;
       createMarquee();
       cachedCandidates = getCandidateElements(); // 框选开始时缓存
@@ -122,6 +150,9 @@ window.HVE_Selector = (function () {
   }
 
   function onMarqueeUp(e) {
+    clearTimeout(marqueeHoldTimer);
+    marqueeHoldTimer = null;
+    marqueeArmed = false;
     document.removeEventListener('mousemove', onMarqueeMove, true);
     document.removeEventListener('mouseup', onMarqueeUp, true);
 
@@ -150,6 +181,16 @@ window.HVE_Selector = (function () {
       isMarqueeSelecting = false;
       cachedCandidates = null;
     }
+  }
+
+  function cancelPendingMarquee() {
+    clearTimeout(marqueeHoldTimer);
+    marqueeHoldTimer = null;
+    marqueeArmed = false;
+    document.removeEventListener('mousemove', onMarqueeMove, true);
+    document.removeEventListener('mouseup', onMarqueeUp, true);
+    cachedCandidates = null;
+    removeMarquee();
   }
 
   function createMarquee() {
@@ -303,8 +344,10 @@ window.HVE_Selector = (function () {
     if (window.HVE_Resize && window.HVE_Resize.isResizing()) return;
 
     const target = e.target;
-    if (isEditorElement(target)) return;
-    if (!isSelectable(target)) return;
+    if (isEditorElement(target) || !isSelectable(target)) {
+      clearHover();
+      return;
+    }
 
     if (target !== hoveredElement) {
       clearHover();
@@ -318,7 +361,7 @@ window.HVE_Selector = (function () {
     if (isMarqueeSelecting) return; // 框选中不处理 click
     if (marqueeJustFinished) return; // 框选刚结束，跳过此 click
 
-    const target = e.target;
+    const target = resolveClickTarget(e.target, e.clientX, e.clientY);
 
     // 点击编辑器自身元素不处理
     if (isEditorElement(target)) return;
@@ -395,6 +438,23 @@ window.HVE_Selector = (function () {
    * - 点击 td/th → 优先选中 table（如果 table 未被选中）
    * - 点击组合内子元素 → 优先选中组合容器
    */
+  function resolveClickTarget(eventTarget, x, y) {
+    // SVG 内部路径作为一个完整 SVG 对象选择
+    const owningSvg = eventTarget.closest?.('svg');
+    if (owningSvg && isSelectable(owningSvg)) return owningSvg;
+
+    // 小图片/SVG 可能被透明文字层覆盖；检查点击点下方的完整堆叠
+    const stack = document.elementsFromPoint?.(x, y) || [];
+    const visual = stack.find(el => {
+      if (!isSelectable(el)) return false;
+      const tag = el.tagName;
+      return tag === 'IMG' || tag === 'SVG' || tag === 'CANVAS';
+    });
+    if (visual && visual !== eventTarget && !visual.contains(eventTarget)) return visual;
+
+    return eventTarget;
+  }
+
   function getSmartSelectTarget(target) {
     // 优先检查组合容器（最外层），再检查 table
     // 这样当 table 嵌套在 group 内时，先选中 group
@@ -921,6 +981,7 @@ window.HVE_Selector = (function () {
     isEditorElement,
     isSelectable,
     isMarquee,
+    resolveClickTarget,
     hideMultiSelectInfo
   };
 })();

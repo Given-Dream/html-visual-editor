@@ -6,7 +6,11 @@
   const btnSaveAs = document.getElementById('btn-save-as');
   const statusBar = document.getElementById('status-bar');
   const fileNameEl = document.getElementById('file-name');
+  const modeGroup = document.querySelector('.interaction-mode-group');
+  const modeButtons = document.querySelectorAll('.mode-option');
+  const modeHint = document.getElementById('mode-hint');
   let isEditorActive = false;
+  let interactionMode = 'move';
 
   // 向当前 tab 发送消息
   async function sendToActiveTab(message) {
@@ -20,8 +24,9 @@
   async function queryEditorState() {
     try {
       const response = await sendToActiveTab({ type: 'QUERY_STATE' });
-      if (response && response.active) {
-        setActiveState(true, response.fileName);
+      if (response) {
+        setInteractionMode(response.interactionMode || 'move');
+        if (response.active) setActiveState(true, response.fileName);
       }
     } catch (e) {
       // content script 可能未注入
@@ -31,6 +36,7 @@
   // 设置激活状态的 UI
   function setActiveState(active, fileName) {
     isEditorActive = active;
+    modeGroup.classList.toggle('disabled', !active);
     if (active) {
       btnToggle.classList.add('active');
       btnToggle.querySelector('span').textContent = '关闭编辑模式';
@@ -52,6 +58,30 @@
     }
   }
 
+  function setInteractionMode(mode) {
+    interactionMode = mode === 'text' ? 'text' : 'move';
+    modeButtons.forEach(button => {
+      const selected = button.dataset.mode === interactionMode;
+      button.classList.toggle('active', selected);
+      button.setAttribute('aria-pressed', String(selected));
+    });
+    modeHint.textContent = interactionMode === 'text'
+      ? '双击文字进入编辑，页面元素不会被拖动'
+      : '单击选中元素后拖动调整位置';
+  }
+
+  modeButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      const nextMode = button.dataset.mode;
+      if (!isEditorActive || nextMode === interactionMode) return;
+      try {
+        const response = await sendToActiveTab({ type: 'SET_INTERACTION_MODE', mode: nextMode });
+        if (response?.success) setInteractionMode(response.interactionMode);
+      } catch (e) {
+        // 当前页面无法接收编辑器消息时保持原状态
+      }
+    });
+  });
   // 切换编辑模式
   btnToggle.addEventListener('click', async () => {
     try {
@@ -79,6 +109,7 @@
             'content/image-handler.js',
             'content/align-guide.js',
             'content/toolbar.js',
+        'content/ppt-ribbon.js',
             'content/insert-panel.js',
             'content/context-menu.js',
             'content/page-sorter.js',
@@ -93,6 +124,7 @@
           const resp = await sendToActiveTab({ type: 'ENABLE_EDITOR' });
           if (resp && resp.success) {
             setActiveState(true);
+            setInteractionMode(resp.interactionMode || 'move');
           }
         }, 300);
       }
@@ -115,5 +147,6 @@
   });
 
   // 初始化时查询状态
+  modeGroup.classList.add('disabled');
   queryEditorState();
 })();

@@ -173,6 +173,14 @@ body {
   letter-spacing: 0.8px;
 }
 
+/* Interaction Mode Switch */
+.interaction-mode-group { transition: opacity 0.2s; }
+.interaction-mode-group.disabled { opacity: 0.45; pointer-events: none; }
+.mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: #F0EDE8; border: 1px solid #E8E5E0; border-radius: 11px; }
+.mode-option { padding: 8px 7px; border: 0; border-radius: 8px; background: transparent; color: #7A6F65; font-family: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.18s ease; }
+.mode-option:hover { color: #2D2B28; }
+.mode-option.active { background: #FFF; color: #B45309; font-weight: 600; box-shadow: 0 1px 4px rgba(45, 43, 40, 0.12); }
+.mode-hint { min-height: 15px; color: #9C8E82; font-size: 10px; line-height: 1.5; }
 /* Shortcuts */
 .shortcuts-section {
   display: flex;

@@ -9,8 +9,10 @@ window.HVE_DragMove = (function () {
   let isActive = false;
   let pendingElements = null;    // 待确认拖拽的元素列表
   let rafId = null;              // requestAnimationFrame 节流
+  let pendingStartedAt = 0;
 
   const DRAG_THRESHOLD = 5;      // 拖拽启动阈值 (px)
+  const DRAG_HOLD_MS = 150;      // 区分普通点选与有意拖动
 
   function activate() {
     isActive = true;
@@ -38,6 +40,7 @@ window.HVE_DragMove = (function () {
     const selector = window.HVE_Selector;
     if (!selector) return;
 
+    const actualTarget = selector.resolveClickTarget?.(e.target, e.clientX, e.clientY) || e.target;
     const isMulti = selector.isMultiSelected();
     const selectedEls = selector.getSelectedElements();
     const singleSelected = selector.getSelected();
@@ -48,7 +51,7 @@ window.HVE_DragMove = (function () {
       // 多选模式 — 检查点击是否在任一选中元素上
       let clickedOnSelected = false;
       for (const sel of selectedEls) {
-        if (sel.contains(e.target) || e.target === sel) {
+        if (sel.contains(actualTarget) || actualTarget === sel) {
           clickedOnSelected = true;
           break;
         }
@@ -63,7 +66,8 @@ window.HVE_DragMove = (function () {
       elementsToMove = selectedEls;
     } else if (singleSelected) {
       // 单选模式
-      if (!singleSelected.contains(e.target) && e.target !== singleSelected) return;
+      // 只能从当前选中对象本身启动拖动；点击可选子对象时先完成选择
+      if (actualTarget !== singleSelected) return;
       if (singleSelected.getAttribute('contenteditable') === 'true') return;
 
       elementsToMove = [singleSelected];
@@ -82,6 +86,7 @@ window.HVE_DragMove = (function () {
     pendingElements = elementsToMove;
     startX = e.clientX;
     startY = e.clientY;
+    pendingStartedAt = performance.now();
 
     document.addEventListener('mousemove', onPendingMove, true);
     document.addEventListener('mouseup', onPendingUp, true);
@@ -93,10 +98,19 @@ window.HVE_DragMove = (function () {
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
 
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+    const movedEnough = Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD;
+    if (movedEnough && performance.now() - pendingStartedAt < DRAG_HOLD_MS) {
+      cancelPending();
+      return;
+    }
+
+    if (movedEnough) {
       // 超过阈值 → 确认拖拽，真正开始
       cancelPendingListeners();
-      startMultiDrag(pendingElements, startX, startY);
+      const confirmedElements = pendingElements;
+      isPendingDrag = false;
+      pendingElements = null;
+      startMultiDrag(confirmedElements, startX, startY);
       // 立即应用已有的偏移
       applyDrag(e);
     }
@@ -126,14 +140,15 @@ window.HVE_DragMove = (function () {
     beforeStates = [];
 
     for (const el of dragTargets) {
-      // 读取当前 transform 中的 translate 值
-      const currentTransform = el.style.transform || '';
-      const { tx, ty } = parseTranslate(currentTransform);
+      // 编辑器位移使用独立 translate 属性，不覆盖页面原有 transform
+      const currentTranslate = el.style.translate || '';
+      const { tx, ty } = parseTranslate(currentTranslate);
+      const startRect = el.getBoundingClientRect();
 
-      origStates.push({ origTx: tx, origTy: ty });
+      origStates.push({ origTx: tx, origTy: ty, startRect });
 
       beforeStates.push({
-        transform: el.style.transform || ''
+        translate: el.style.translate || ''
       });
 
       el.setAttribute('data-hve-dragging', 'true');
@@ -146,23 +161,16 @@ window.HVE_DragMove = (function () {
   /**
    * 解析 transform 中的 translate 值
    */
-  function parseTranslate(transform) {
-    const match = transform.match(/translate\(([^,]+)px,\s*([^)]+)px\)/);
-    if (match) {
-      return { tx: parseFloat(match[1]) || 0, ty: parseFloat(match[2]) || 0 };
-    }
-    return { tx: 0, ty: 0 };
+  function parseTranslate(value) {
+    const parts = value.trim().split(/\s+/);
+    return {
+      tx: parseFloat(parts[0]) || 0,
+      ty: parseFloat(parts[1]) || 0
+    };
   }
 
-  /**
-   * 设置 transform: translate()，保留其他 transform 属性
-   */
   function setTranslate(el, tx, ty) {
-    const current = el.style.transform || '';
-    // 移除已有的 translate
-    const cleaned = current.replace(/translate\([^)]+\)\s*/g, '').trim();
-    const translateStr = `translate(${tx}px, ${ty}px)`;
-    el.style.transform = cleaned ? `${translateStr} ${cleaned}` : translateStr;
+    el.style.translate = `${tx}px ${ty}px`;
   }
 
   function applyDrag(e) {
@@ -174,7 +182,7 @@ window.HVE_DragMove = (function () {
     if (window.HVE_AlignGuide && !e.altKey) {
       const previewRects = dragTargets.map((el, i) => {
         const orig = origStates[i];
-        const rect = el.getBoundingClientRect();
+        const rect = orig.startRect;
         return {
           left: rect.left + dx + snapDx,
           top: rect.top + dy + snapDy,
@@ -233,14 +241,14 @@ window.HVE_DragMove = (function () {
           window.HVE_History.record({
             type: 'move',
             element: el,
-            before: { transform: beforeStates[i].transform },
-            after: { transform: el.style.transform || '' },
+            before: { translate: beforeStates[i].translate },
+            after: { translate: el.style.translate || '' },
             description: dragTargets.length > 1 ? '批量移动元素' : '移动元素'
           });
         }
       } else {
         // 没有移动足够距离，恢复到拖拽前的状态
-        el.style.transform = beforeStates[i].transform;
+        el.style.translate = beforeStates[i].translate;
       }
     }
 
@@ -258,7 +266,7 @@ window.HVE_DragMove = (function () {
       el.removeAttribute('data-hve-dragging');
       // 仅在异常取消时恢复（非正常 mouseup 结束）
       if (!fromMouseUp && beforeStates[i] && isDraggingFlag) {
-        el.style.transform = beforeStates[i].transform;
+        el.style.translate = beforeStates[i].translate;
       }
     }
     if (rafId) {

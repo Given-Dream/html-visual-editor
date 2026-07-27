@@ -57,6 +57,7 @@ window.HVE_History = (function () {
         if (state.transform !== undefined) {
           el.style.transform = state.transform;
         }
+        if (state.translate !== undefined) el.style.translate = state.translate;
         // 兼容旧式 left/top（如果有的话）
         if (state.left !== undefined) el.style.left = state.left;
         if (state.top !== undefined) el.style.top = state.top;
@@ -70,6 +71,7 @@ window.HVE_History = (function () {
         if (state.left !== undefined) el.style.left = state.left;
         if (state.top !== undefined) el.style.top = state.top;
         if (state.transform !== undefined) el.style.transform = state.transform;
+        if (state.translate !== undefined) el.style.translate = state.translate;
         break;
 
       case 'content':

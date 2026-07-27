@@ -1727,3 +1727,94 @@ th[data-hve-editing] {
   color: #D97706;
   box-shadow: inset 0 0 0 1px rgba(217,119,6,0.2);
 }
+
+/* ===== PPT-style ribbon: arrange and shapes ===== */
+[data-hve-ppt-ribbon] {
+  position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 2147483642;
+  display: flex; align-items: stretch; gap: 0; max-width: calc(100vw - 32px); min-height: 76px;
+  padding: 6px 10px 3px; border: 1px solid #D8D3CB; border-radius: 10px;
+  background: rgba(255,255,255,.97); color: #3C3834; font-family: 'Segoe UI',sans-serif;
+  box-shadow: 0 5px 22px rgba(45,43,40,.16); backdrop-filter: blur(10px); user-select: none;
+}
+[data-hve-ppt-ribbon].collapsed { min-height: 0; height: 26px; overflow: hidden; padding-top: 2px; }
+[data-hve-ppt-ribbon].collapsed > :not(.hve-ribbon-collapse) { visibility: hidden; }
+.hve-ribbon-brand { width: 52px; display:flex; flex-direction:column; justify-content:center; align-items:center; border-right:1px solid #E8E5E0; margin-right:4px; }
+.hve-ribbon-brand span { color:#D97706; font-size:14px; font-weight:800; }
+.hve-ribbon-brand small { color:#9C8E82; font-size:9px; }
+.hve-ribbon-group { position:relative; display:flex; align-items:center; gap:3px; padding:0 8px 14px; border-right:1px solid #E8E5E0; }
+.hve-ribbon-group > button { display:flex; align-items:center; gap:5px; min-height:38px; padding:5px 8px; border:0; border-radius:6px; background:transparent; color:#4A4540; cursor:pointer; font:12px 'Segoe UI',sans-serif; }
+.hve-ribbon-group > button:hover, .hve-shape-quick button:hover { background:#FEF3E7; color:#B45309; }
+.hve-ribbon-group > button b { font-size:19px; font-weight:400; }
+.hve-ribbon-group > button i { font-size:9px; font-style:normal; color:#8B8178; }
+.hve-ribbon-caption { position:absolute; bottom:0; left:0; right:0; text-align:center; color:#9C8E82; font-size:9px; }
+.hve-ribbon-shapes { min-width:205px; flex-wrap:wrap; align-content:center; }
+.hve-shape-quick { display:flex; gap:2px; }
+.hve-shape-quick button { width:28px; height:30px; border:1px solid #E8E5E0; border-radius:5px; background:#FFF; color:#4A4540; font-size:18px; cursor:pointer; }
+.hve-more-shapes { min-height:30px !important; padding:4px 6px !important; }
+.hve-ribbon-collapse { align-self:flex-start; margin-left:5px; width:22px; height:22px; border:0; border-radius:4px; background:#F5F2ED; color:#7A6F65; cursor:pointer; }
+[data-hve-ribbon-panel] { position:fixed; z-index:2147483647; min-width:210px; padding:6px; border:1px solid #D8D3CB; border-radius:8px; background:#FFF; box-shadow:0 8px 26px rgba(45,43,40,.22); font-family:'Segoe UI',sans-serif; }
+[data-hve-ribbon-panel] > button { display:flex; width:100%; align-items:center; gap:10px; padding:7px 10px; border:0; border-radius:5px; background:transparent; color:#3C3834; text-align:left; cursor:pointer; font:12px 'Segoe UI',sans-serif; }
+[data-hve-ribbon-panel] > button:hover { background:#FEF3E7; color:#B45309; }
+[data-hve-ribbon-panel] > button b { width:22px; color:#D97706; font-size:17px; text-align:center; }
+[data-hve-ribbon-panel] hr { margin:5px 4px; border:0; border-top:1px solid #E8E5E0; }
+.hve-panel-title { padding:5px 7px 8px; color:#7A6F65; font-size:11px; font-weight:600; }
+.hve-shape-gallery { width:292px; }
+.hve-shape-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+.hve-shape-grid button { display:flex; min-width:0; flex-direction:column; align-items:center; gap:2px; padding:6px 2px; border:1px solid #E8E5E0; border-radius:6px; background:#FFF; color:#4A4540; cursor:pointer; }
+.hve-shape-grid button:hover { border-color:#D97706; background:#FFF8F0; color:#B45309; }
+.hve-shape-grid b { font-size:22px; line-height:24px; font-weight:400; }
+.hve-shape-grid span { overflow:hidden; max-width:58px; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+[data-hve-shape] { cursor:move; }
+[data-hve-shape]::selection { background:transparent; }
+@media (max-width:900px) { [data-hve-ppt-ribbon] { left:8px; right:8px; transform:none; overflow-x:auto; } .hve-ribbon-brand { display:none; } }
+/* 移动元素模式：阻止浏览器把拖动误判为文字框选 */
+html[data-hve-interaction-mode="move"] body :not(input):not(textarea):not(select):not(option) {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+/* 富文本/对象工具条停靠为 PPT 功能区第二行 */
+[data-hve-ppt-ribbon] {
+  width: min(1180px, calc(100vw - 32px));
+  flex-wrap: wrap;
+  justify-content: center;
+  box-sizing: border-box;
+}
+[data-hve-ppt-ribbon] > [data-hve-toolbar] {
+  position: static !important;
+  flex: 0 0 100%;
+  order: 10;
+  width: 100%;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 5px 7px;
+  transform: none !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-width: 1px 0 0;
+  border-radius: 0 0 7px 7px;
+  box-shadow: none;
+  scrollbar-width: thin;
+}
+[data-hve-ppt-ribbon].collapsed > [data-hve-toolbar] {
+  display: none !important;
+}
+/* 可拖动 PPT 功能区 */
+.hve-ribbon-brand[data-ribbon-drag-handle] {
+  cursor: grab;
+  touch-action: none;
+}
+.hve-ribbon-brand[data-ribbon-drag-handle] > b {
+  color: #B8ADA4;
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 13px;
+}
+[data-hve-ppt-ribbon].dragging {
+  cursor: grabbing;
+  opacity: .94;
+  box-shadow: 0 10px 32px rgba(45,43,40,.28);
+  transition: none;
+}
+[data-hve-ppt-ribbon].dragging * {
+  cursor: grabbing !important;
+}

@@ -138,7 +138,8 @@ window.HVE_Toolbar = (function () {
       e.preventDefault();
     });
     toolbarEl.addEventListener('click', onToolbarClick);
-    document.body.appendChild(toolbarEl);
+    const ribbonHost = window.HVE_PPTRibbon?.getElement?.();
+    (ribbonHost || document.body).appendChild(toolbarEl);
   }
 
   function closeDropdown() {
@@ -965,6 +966,8 @@ window.HVE_Toolbar = (function () {
   }
 
   function positionToolbar(el) {
+    // 停靠在 PPT 功能区内时由功能区布局，不再跟随选中元素
+    if (toolbarEl?.closest('[data-hve-ppt-ribbon]')) return;
     if (!toolbarEl || !el) return;
     const rect = el.getBoundingClientRect();
     const tbWidth = toolbarEl.offsetWidth || 500;

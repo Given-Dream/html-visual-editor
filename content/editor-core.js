@@ -2,6 +2,7 @@
 window.HVE_Core = (function () {
   let isActive = false;
   let statusIndicator = null;
+  let interactionMode = 'move';
 
   function enable() {
     if (isActive) return;
@@ -9,11 +10,11 @@ window.HVE_Core = (function () {
 
     // 启动各模块
     if (window.HVE_Selector) window.HVE_Selector.activate();
-    if (window.HVE_DragMove) window.HVE_DragMove.activate();
-    if (window.HVE_TextEdit) window.HVE_TextEdit.activate();
+    applyInteractionMode();
     if (window.HVE_TableEdit) window.HVE_TableEdit.activate();
     if (window.HVE_ImageHandler) window.HVE_ImageHandler.activate();
     if (window.HVE_Toolbar) window.HVE_Toolbar.activate();
+    if (window.HVE_PPTRibbon) window.HVE_PPTRibbon.activate();
     if (window.HVE_InsertPanel) window.HVE_InsertPanel.activate();
     if (window.HVE_ContextMenu) window.HVE_ContextMenu.activate();
     if (window.HVE_AlignGuide) window.HVE_AlignGuide.activate();
@@ -28,6 +29,7 @@ window.HVE_Core = (function () {
   function disable() {
     if (!isActive) return;
     isActive = false;
+    document.documentElement.removeAttribute('data-hve-interaction-mode');
 
     if (window.HVE_Selector) window.HVE_Selector.deactivate();
     if (window.HVE_DragMove) window.HVE_DragMove.deactivate();
@@ -36,6 +38,7 @@ window.HVE_Core = (function () {
     if (window.HVE_TableEdit) window.HVE_TableEdit.deactivate();
     if (window.HVE_ImageHandler) window.HVE_ImageHandler.deactivate();
     if (window.HVE_Toolbar) window.HVE_Toolbar.deactivate();
+    if (window.HVE_PPTRibbon) window.HVE_PPTRibbon.deactivate();
     if (window.HVE_InsertPanel) window.HVE_InsertPanel.deactivate();
     if (window.HVE_ContextMenu) window.HVE_ContextMenu.deactivate();
     if (window.HVE_AlignGuide) window.HVE_AlignGuide.deactivate();
@@ -54,6 +57,25 @@ window.HVE_Core = (function () {
     if (isActive) disable(); else enable();
   }
 
+  function applyInteractionMode() {
+    if (!isActive) return;
+    if (interactionMode === 'text') {
+      window.HVE_DragMove?.deactivate();
+      window.HVE_TextEdit?.activate();
+    } else {
+      window.HVE_TextEdit?.deactivate();
+      window.getSelection()?.removeAllRanges();
+      window.HVE_DragMove?.activate();
+    }
+    document.documentElement.setAttribute('data-hve-interaction-mode', interactionMode);
+  }
+
+  function setInteractionMode(mode) {
+    if (mode !== 'move' && mode !== 'text') return false;
+    interactionMode = mode;
+    applyInteractionMode();
+    return true;
+  }
   function onKeyDown(e) {
     if (!isActive) return;
 
@@ -436,7 +458,7 @@ window.HVE_Core = (function () {
       switch (msg.type) {
         case 'ENABLE_EDITOR':
           enable();
-          sendResponse({ success: true });
+          sendResponse({ success: true, interactionMode });
           break;
         case 'DISABLE_EDITOR':
           disable();
@@ -449,10 +471,16 @@ window.HVE_Core = (function () {
         case 'QUERY_STATE':
           sendResponse({
             active: isActive,
+            interactionMode,
             fileName: window.HVE_FileManager?.getFileName() || document.title
           });
           break;
-        case 'SAVE_FILE':
+        case 'SET_INTERACTION_MODE':
+          sendResponse({
+            success: setInteractionMode(msg.mode),
+            interactionMode
+          });
+          break;        case 'SAVE_FILE':
           (async () => {
             try {
               await saveCurrentFile();
@@ -529,5 +557,5 @@ window.HVE_Core = (function () {
     });
   }
 
-  return { enable, disable, toggle, getState, showToast, groupElements, ungroupElement };
+  return { enable, disable, toggle, getState, setInteractionMode, showToast, groupElements, ungroupElement };
 })();
